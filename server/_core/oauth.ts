@@ -20,24 +20,26 @@ export function registerOAuthRoutes(app: Express) {
     }
 
     try {
-      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+      const userInfo = await sdk.exchangeGitHubCodeForUserInfo(code);
 
-      if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
+      if (!userInfo.id) {
+        res.status(400).json({ error: "GitHub user ID missing" });
         return;
       }
 
+      // Use GitHub user ID as openId
+      const openId = `github_${userInfo.id}`;
+
       await db.upsertUser({
-        openId: userInfo.openId,
-        name: userInfo.name || null,
-        email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+        openId,
+        name: userInfo.name || userInfo.login || null,
+        email: userInfo.email || null,
+        loginMethod: "github",
         lastSignedIn: new Date(),
       });
 
-      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
-        name: userInfo.name || "",
+      const sessionToken = await sdk.createSessionToken(openId, {
+        name: userInfo.name || userInfo.login || "",
         expiresInMs: ONE_YEAR_MS,
       });
 
@@ -51,3 +53,4 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 }
+
